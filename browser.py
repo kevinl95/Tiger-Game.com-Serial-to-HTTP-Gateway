@@ -16,7 +16,9 @@ class GameComGateway:
         self.buffer = ""
         self.current_menu = "main"
         self.hn_stories = []
+        self.hn_links = []
         self.reddit_posts = []
+        self.reddit_titles = []
         self.awaiting_url = False
         self.current_links = []
         self.current_url = ""
@@ -287,7 +289,7 @@ class GameComGateway:
             )
             soup = BeautifulSoup(resp.text, 'html.parser')
             
-            posts = []
+            self.reddit_titles = []
             self.reddit_posts = []
             
             for post in soup.select('.thing')[:15]:
@@ -296,13 +298,13 @@ class GameComGateway:
                     title = title_elem.get_text().strip()
                     link = title_elem.find('a')
                     url = link.get('href', '') if link else ''
-                    posts.append(title)
+                    self.reddit_titles.append(title)
                     self.reddit_posts.append(url)
             
             self.page = 0
             
             self.send_line('\r\n=== r/technology ===')
-            self.show_paginated_items(posts, "posts")
+            self.show_paginated_items(self.reddit_titles, "posts")
             
             self.send_line('Enter # to read')
             self.send_line('M. Main Menu')
@@ -341,8 +343,9 @@ class GameComGateway:
             self.send('> ')
         elif self.current_menu == "reddit":
             self.send_line('\r\n=== r/technology ===')
-            # Store reddit titles separately for re-display
-            self.send_line('Use M to return to menu')
+            self.show_paginated_items(self.reddit_titles, "posts")
+            self.send_line('Enter # to read')
+            self.send_line('M. Main Menu')
             self.send('> ')
         elif self.current_menu == "page":
             self.send_line('\r\n--- LINKS ---')
