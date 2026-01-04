@@ -21,9 +21,11 @@ class GameComGateway:
         self.reddit_titles = []
         self.awaiting_url = False
         self.current_links = []
+        self.current_content = []
         self.current_url = ""
         self.page = 0
         self.items_per_page = 5
+        self.viewing_links = False
         
     def send(self, text):
         """Send text to Game.com"""
@@ -93,6 +95,58 @@ class GameComGateway:
                 break
         
         return links
+    
+    def show_content_page(self):
+        """Show current page of article content"""
+        if not self.current_content:
+            self.send_line('\r\nNo content available')
+            self.viewing_links = True
+            self.page = 0
+            self.show_links_section()
+            return
+        
+        total_pages = len(self.current_content)
+        current_page = self.page + 1
+        
+        self.send_line(f'\r\nContent {current_page}/{total_pages}\r\n')
+        
+        # Show current paragraph
+        text = self.current_content[self.page]
+        wrapped = self.wrap_text(text, width=30)
+        self.send_line(wrapped)
+        self.send_line('')
+        
+        # Show navigation
+        if self.page < len(self.current_content) - 1:
+            self.send_line('N. Next')
+        else:
+            # Last page of content
+            if self.current_links:
+                self.send_line('N. View Links')
+            else:
+                self.send_line('(End of content)')
+        
+        if self.page > 0:
+            self.send_line('P. Previous')
+        
+        self.send_line('U. New URL  M. Menu')
+        self.send('> ')
+    
+    def show_links_section(self):
+        """Show links section with pagination"""
+        if not self.current_links:
+            self.send_line('\r\nNo links found')
+            self.send_line('U. New URL  M. Menu')
+            self.send('> ')
+            return
+        
+        self.send_line('\r\n--- LINKS ---')
+        self.send_line(f'{len(self.current_links)} links found\r\n')
+        self.show_paginated_items(self.current_links, "links")
+        self.send_line('\r\nEnter # to follow')
+        self.send_line('B. Back to content')
+        self.send_line('U. New URL  M. Menu')
+        self.send('> ')
     
     def show_paginated_items(self, items, item_type="items"):
         """Show a page of items with pagination controls"""
@@ -170,30 +224,42 @@ class GameComGateway:
                 soup.find('body')
             )
             
+            # Extract and store content paragraphs
+            self.current_content = []
             if main_content:
-                paragraphs = main_content.find_all('p', limit=3)
+                paragraphs = main_content.find_all('p')
                 
                 if paragraphs:
                     for p in paragraphs:
                         text = p.get_text().strip()
                         if len(text) > 20:
-                            wrapped = self.wrap_text(text, width=30)
-                            self.send_line(wrapped)
-                            self.send_line('')
+                            self.current_content.append(text)
                 else:
+                    # Fallback to body text, split into chunks
                     text = main_content.get_text()
-                    text = re.sub(r'\s+', ' ', text).strip()[:300]
-                    wrapped = self.wrap_text(text, width=30)
-                    self.send_line(wrapped)
-                    self.send_line('')
+                    text = re.sub(r'\s+', ' ', text).strip()
+                    # Split into ~200 char chunks
+                    words = text.split()
+                    chunk = []
+                    current_length = 0
+                    for word in words:
+                        if current_length + len(word) + 1 > 200 and chunk:
+                            self.current_content.append(' '.join(chunk))
+                            chunk = [word]
+                            current_length = len(word)
+                        else:
+                            chunk.append(word)
+                            current_length += len(word) + 1
+                    if chunk:
+                        self.current_content.append(' '.join(chunk))
             
+            # Extract links for later
             self.current_links = self.extract_links(soup, url)
             self.page = 0
+            self.viewing_links = False
             
-            if self.current_links:
-                self.send_line('\r\n--- LINKS ---')
-                self.show_paginated_items(self.current_links, "links")
-                self.send_line('\r\nEnter # to follow')
+            # Show first page of content
+            self.show_content_page()
             
             self.send_line('U. New URL  M. Menu')
             self.send('> ')
@@ -348,11 +414,19 @@ class GameComGateway:
             self.send_line('M. Main Menu')
             self.send('> ')
         elif self.current_menu == "page":
-            self.send_line('\r\n--- LINKS ---')
-            self.show_paginated_items(self.current_links, "links")
-            self.send_line('\r\nEnter # to follow')
-            self.send_line('U. New URL  M. Menu')
-            self.send('> ')
+            if self.viewing_links:
+                # Paginating through links
+                self.show_links_section()
+            else:
+                # Paginating through content
+                # Check if we're at the end and should switch to links
+                if direction == 'N' and self.page >= len(self.current_content) - 1:
+                    # Transition to links
+                    self.viewing_links = True
+                    self.page = 0
+                    self.show_links_section()
+                else:
+                    self.show_content_page()
     
     def handle_user_input(self, line):
         """Handle user input based on current menu"""
@@ -428,16 +502,32 @@ class GameComGateway:
                 self.send('> ')
         
         elif self.current_menu == "page":
+            if line_upper == 'B':
+                # Back to content from links
+                if self.viewing_links:
+                    self.viewing_links = False
+                    self.page = 0
+                    self.show_content_page()
+                else:
+                    self.send_line('\r\nAlready viewing content')
+                    self.send('> ')
+                return
+            
             try:
                 num = int(line)
-                if 1 <= num <= len(self.current_links):
-                    new_url = self.current_links[num - 1]['url']
-                    self.fetch_url(new_url)
+                if self.viewing_links:
+                    if 1 <= num <= len(self.current_links):
+                        new_url = self.current_links[num - 1]['url']
+                        self.fetch_url(new_url)
+                    else:
+                        self.send_line('\r\nInvalid link number')
+                        self.send('> ')
                 else:
-                    self.send_line('\r\nInvalid link number')
+                    self.send_line('\r\nViewing content')
+                    self.send_line('Use N/P to navigate')
                     self.send('> ')
             except ValueError:
-                self.send_line('\r\nEnter #, N/P, U, or M')
+                self.send_line('\r\nEnter #, N/P, B, U, or M')
                 self.send('> ')
     
     def run(self):
