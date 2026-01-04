@@ -297,7 +297,7 @@ class GameComGateway:
     def show_main_menu(self):
         """Show main menu"""
         self.send_line('\r\n=== GAME.COM GATEWAY ===')
-        self.send_line('1997 -> 2025 Portal')
+        self.send_line('1997 -> Today Portal')
         self.send_line('')
         self.send_line('1. Hacker News')
         self.send_line('2. Reddit r/technology')
