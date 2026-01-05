@@ -1,5 +1,7 @@
 # Tiger Game.com Web Gateway
 
+![Game.com showing web content](https://hackster.imgix.net/uploads/attachments/1917456/_7ZiRw9of7e.blob?auto=compress%2Cformat&w=900&h=675&fit=min)
+
 **Browsing 2025 web on a 1997 handheld by reverse-engineering its modem protocol and building a serial-to-HTTP gateway.**
 
 ## What Is This?
